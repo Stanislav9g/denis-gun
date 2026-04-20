@@ -2,235 +2,197 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Мой Шутер - Улучшенная База</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Chicken Gun: School Edition</title>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #87CEEB; user-select: none; }
-        #instructions {
-            width: 100vw; height: 100vh; position: absolute; top: 0; left: 0;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            background-color: rgba(0,0,0,0.7); color: white; cursor: pointer; z-index: 10;
-            font-family: sans-serif;
-        }
-        #crosshair {
-            position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
-            transform: translate(-50%, -50%); pointer-events: none; z-index: 5;
-        }
-        #crosshair::before, #crosshair::after { content: ''; position: absolute; background: #ffcc00; box-shadow: 0 0 5px red;}
-        #crosshair::before { top: 9px; left: 0; width: 20px; height: 2px; }
-        #crosshair::after { top: 0; left: 9px; width: 2px; height: 20px; }
-        #ui {
-            position: absolute; top: 20px; left: 20px; color: white; font-size: 28px;
-            font-family: Impact, sans-serif; z-index: 5; text-shadow: 2px 2px 0px #000;
-        }
+        body { margin: 0; overflow: hidden; background-color: #000; user-select: none; touch-action: none; font-family: 'Impact', sans-serif; }
+        #ui { position: absolute; top: 10px; left: 10px; color: white; font-size: 24px; z-index: 5; text-shadow: 2px 2px #000; }
+        
+        /* Мобильное управление */
+        .touch-ctrl { position: absolute; bottom: 40px; z-index: 20; display: none; }
+        #joystick-zone { left: 40px; width: 120px; height: 120px; background: rgba(255,255,255,0.2); border-radius: 50%; }
+        #shoot-btn { right: 40px; width: 80px; height: 80px; background: rgba(255,0,0,0.5); border-radius: 50%; border: 4px solid white; display: none; align-items: center; justify-content: center; color: white; font-weight: bold; }
+        #jump-btn { right: 140px; bottom: 40px; width: 60px; height: 60px; background: rgba(255,255,255,0.3); border-radius: 50%; display: none; align-items: center; justify-content: center; color: white; }
+
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; transform: translate(-50%, -50%); pointer-events: none; z-index: 5; border: 2px solid rgba(0,255,0,0.5); border-radius: 50%; }
+        #instructions { position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; text-align: center; }
     </style>
 </head>
 <body>
     <div id="ui">ФРАГИ: <span id="score">0</span></div>
     <div id="instructions">
-        <h1 style="font-size: 50px; margin: 0; color: #ffcc00;">НАЖМИ ДЛЯ СТАРТА</h1>
-        <p style="font-size: 20px;">W,A,S,D - Движение | Пробел - Прыжок | ЛКМ - Стрельба</p>
+        <h1>CHICKEN GUN: ШКОЛА</h1>
+        <p>ПК: WASD + Мышь + Пробел<br>ТЕЛЕФОН: Левая часть - бег, Правая - обзор, Кнопки - огонь</p>
+        <button style="padding: 15px 30px; font-size: 20px; cursor: pointer;">ИГРАТЬ</button>
     </div>
+    
     <div id="crosshair"></div>
+    
+    <div id="joystick-zone" class="touch-ctrl"></div>
+    <div id="shoot-btn" class="touch-ctrl">ОГОНЬ</div>
+    <div id="jump-btn" class="touch-ctrl">ПРЫЖОК</div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 
     <script>
-        let camera, scene, renderer, controls, gunGroup;
-        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-        let canJump = false;
-        let prevTime = performance.now();
-        const velocity = new THREE.Vector3();
-        const direction = new THREE.Vector3();
-        
-        const enemies = [];
+        let camera, scene, renderer, controls, gun;
         let score = 0;
+        const enemies = [];
+        const clock = new THREE.Clock();
+        
+        // Движение
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false, canJump = false;
+        const velocity = new THREE.Vector3(), direction = new THREE.Vector3();
+
+        // Мобильные переменные
+        let isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        let touchLookX = 0, touchLookY = 0;
 
         init();
         animate();
 
         function init() {
-            // Сцена и Камера
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB);
-            scene.fog = new THREE.Fog(0x87CEEB, 20, 300);
+            scene.background = new THREE.Color(0x333344);
+            scene.fog = new THREE.Fog(0x333344, 10, 150);
 
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 1000);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            const light = new THREE.HemisphereLight(0xeeeeff, 0x777788, 0.8);
+            scene.add(light);
 
-            // Освещение (Солнце и мягкий свет)
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
-            scene.add(ambientLight);
-            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            dirLight.position.set(100, 200, 50);
-            scene.add(dirLight);
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
 
-            // Управление
             controls = new THREE.PointerLockControls(camera, document.body);
-            const instructions = document.getElementById('instructions');
 
-            instructions.addEventListener('click', () => controls.lock());
-            controls.addEventListener('lock', () => instructions.style.display = 'none');
-            controls.addEventListener('unlock', () => instructions.style.display = 'flex');
+            // Клик для старта
+            document.getElementById('instructions').addEventListener('click', () => {
+                if (!isMobile) controls.lock();
+                document.getElementById('instructions').style.display = 'none';
+                if (isMobile) {
+                    document.querySelectorAll('.touch-ctrl').forEach(el => el.style.display = 'flex');
+                }
+            });
+
+            // --- ЛОКАЦИЯ: ШКОЛА ---
+            const wallMat = new THREE.MeshLambertMaterial({ color: 0xcccccc }); // Светлые стены
+            const floorMat = new THREE.MeshLambertMaterial({ color: 0x555566 }); // Линолеум
+
+            // Пол коридора
+            const floor = new THREE.Mesh(new THREE.BoxGeometry(40, 1, 200), floorMat);
+            floor.position.y = -0.5;
+            scene.add(floor);
+
+            // Стены коридора
+            function createWall(x, z, w, h, d) {
+                const wall = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+                wall.position.set(x, h/2, z);
+                scene.add(wall);
+            }
+
+            createWall(-20, 0, 1, 15, 200); // Левая стена
+            createWall(20, 0, 1, 15, 200);  // Правая стена
+
+            // Классы (комнаты)
+            for(let i = -80; i <= 80; i += 40) {
+                // Создаем проемы (двери) и комнаты
+                createWall(-35, i, 30, 15, 1); 
+                // Парты в классах (упрощенно)
+                for(let px = -45; px < -25; px += 5) {
+                    const desk = new THREE.Mesh(new THREE.BoxGeometry(3, 2, 2), new THREE.MeshLambertMaterial({color: 0x8b4513}));
+                    desk.position.set(px, 1, i + 5);
+                    scene.add(desk);
+                }
+            }
+
+            // Оружие
+            const gunGeom = new THREE.Group();
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.6, 2), new THREE.MeshLambertMaterial({color: 0x111111}));
+            gunGeom.add(body);
+            const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.2, 2), new THREE.MeshLambertMaterial({color: 0x333333}));
+            barrel.position.z = -1.5;
+            gunGeom.add(barrel);
+            gun = gunGeom;
+            gun.position.set(0.5, -0.5, -1);
+            camera.add(gun);
             scene.add(controls.getObject());
 
-            // Создаем Оружие (сборка из блоков)
-            gunGroup = new THREE.Group();
-            const matDark = new THREE.MeshLambertMaterial({ color: 0x222222 });
-            const matWood = new THREE.MeshLambertMaterial({ color: 0x8b4513 });
-            const matMetal = new THREE.MeshLambertMaterial({ color: 0x777777 });
-
-            // Ствол
-            const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 4), matMetal);
-            barrel.position.set(0, 0, -1);
-            gunGroup.add(barrel);
-            
-            // Цевье
-            const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 2), matWood);
-            handguard.position.set(0, -0.1, -0.5);
-            gunGroup.add(handguard);
-
-            // Магазин
-            const mag = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.2, 0.6), matDark);
-            mag.position.set(0, -0.8, -0.2);
-            mag.rotation.x = -0.2;
-            gunGroup.add(mag);
-
-            // Рукоятка
-            const handle = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1, 0.5), matDark);
-            handle.position.set(0, -0.6, 0.8);
-            handle.rotation.x = 0.2;
-            gunGroup.add(handle);
-
-            gunGroup.position.set(1.5, -1.5, -2.5); // Позиция в руках
-            camera.add(gunGroup); // Привязываем к камере
-
-            // Клавиатура
-            const onKeyDown = (event) => {
-                switch (event.code) {
-                    case 'KeyW': moveForward = true; break;
-                    case 'KeyA': moveLeft = true; break;
-                    case 'KeyS': moveBackward = true; break;
-                    case 'KeyD': moveRight = true; break;
-                    case 'Space': if (canJump) velocity.y += 300; canJump = false; break;
-                }
+            // Управление (Клавиатура)
+            const onKeyDown = (e) => {
+                if(e.code === 'KeyW') moveForward = true;
+                if(e.code === 'KeyS') moveBackward = true;
+                if(e.code === 'KeyA') moveLeft = true;
+                if(e.code === 'KeyD') moveRight = true;
+                if(e.code === 'Space' && canJump) { velocity.y += 25; canJump = false; }
             };
-            const onKeyUp = (event) => {
-                switch (event.code) {
-                    case 'KeyW': moveForward = false; break;
-                    case 'KeyA': moveLeft = false; break;
-                    case 'KeyS': moveBackward = false; break;
-                    case 'KeyD': moveRight = false; break;
-                }
+            const onKeyUp = (e) => {
+                if(e.code === 'KeyW') moveForward = false;
+                if(e.code === 'KeyS') moveBackward = false;
+                if(e.code === 'KeyA') moveLeft = false;
+                if(e.code === 'KeyD') moveRight = false;
             };
             document.addEventListener('keydown', onKeyDown);
             document.addEventListener('keyup', onKeyUp);
-            document.addEventListener('mousedown', shoot);
+            document.addEventListener('mousedown', () => { if(controls.isLocked || isMobile) shoot(); });
 
-            // Земля (Трава)
-            const floorGeo = new THREE.PlaneGeometry(1000, 1000, 10, 10);
-            const floorMat = new THREE.MeshLambertMaterial({ color: 0x44aa44 });
-            const floor = new THREE.Mesh(floorGeo, floorMat);
-            floor.rotation.x = -Math.PI / 2;
-            scene.add(floor);
+            // Мобильные события
+            if (isMobile) {
+                document.getElementById('shoot-btn').addEventListener('touchstart', (e) => { e.preventDefault(); shoot(); });
+                document.getElementById('jump-btn').addEventListener('touchstart', (e) => { e.preventDefault(); if(canJump) { velocity.y += 25; canJump = false; } });
+                
+                // Тач-обзор (правая часть экрана)
+                window.addEventListener('touchmove', (e) => {
+                    let touch = e.touches[0];
+                    if (touch.clientX > window.innerWidth / 2) {
+                        camera.rotation.y -= touch.force || 0.05 * (touch.clientX - (window.innerWidth/2)) * 0.0001; // Упрощенный обзор
+                        // Для полноценного обзора на мобилках лучше использовать yaw/pitch
+                        controls.getObject().rotation.y -= 0.05; // Временный хак для вращения
+                    }
+                });
+            }
 
-            // Спавн первых куриц
-            for (let i = 0; i < 15; i++) spawnChicken();
-
-            // Рендер
-            renderer = new THREE.WebGLRenderer({ antialias: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
+            for(let i=0; i<10; i++) spawnChicken();
             window.addEventListener('resize', onWindowResize);
         }
 
-        // Функция создания "Курицы" из блоков
         function spawnChicken() {
             const chicken = new THREE.Group();
-            const matWhite = new THREE.MeshLambertMaterial({color: 0xffffff});
-            const matRed = new THREE.MeshLambertMaterial({color: 0xff0000});
-            const matYellow = new THREE.MeshLambertMaterial({color: 0xffaa00});
-
-            // Тело
-            const body = new THREE.Mesh(new THREE.BoxGeometry(2, 2, 3), matWhite);
-            body.position.y = 2;
+            const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), new THREE.MeshLambertMaterial({color: 0xffffff}));
+            body.position.y = 0.75;
             chicken.add(body);
-
-            // Голова
-            const head = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1.5, 1.5), matWhite);
-            head.position.set(0, 3.5, 1.5);
-            chicken.add(head);
-
-            // Клюв
-            const beak = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 1), matYellow);
-            beak.position.set(0, 3.5, 2.5);
+            const beak = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.5), new THREE.MeshLambertMaterial({color: 0xffaa00}));
+            beak.position.set(0, 0.8, 0.8);
             chicken.add(beak);
-
-            // Гребешок
-            const comb = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.8, 1), matRed);
-            comb.position.set(0, 4.5, 1.5);
-            chicken.add(comb);
-
-            // Ставим в случайное место
-            chicken.position.set(
-                Math.floor(Math.random() * 200 - 100),
-                0,
-                Math.floor(Math.random() * 200 - 100)
-            );
             
-            // Сохраняем ссылки на меши для попаданий
-            chicken.children.forEach(child => child.isEnemyPart = true);
-            
+            chicken.position.set(Math.random()*30-15, 0, Math.random()*160-80);
+            chicken.userData = { alive: true };
             scene.add(chicken);
             enemies.push(chicken);
         }
 
         function shoot() {
-            if (!controls.isLocked) return;
+            // Визуальная отдача
+            camera.position.y += 0.1;
+            setTimeout(() => camera.position.y -= 0.1, 50);
 
-            // Анимация отдачи оружия
-            gunGroup.position.z += 0.5;
-            gunGroup.rotation.x += 0.1;
-            setTimeout(() => {
-                gunGroup.position.z -= 0.5;
-                gunGroup.rotation.x -= 0.1;
-            }, 50);
-
-            // Стрельба (Рейкастинг)
             const raycaster = new THREE.Raycaster();
             raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-
-            // Проверяем попадание (нужен флаг true для проверки внутри Групп)
             const intersects = raycaster.intersectObjects(enemies, true);
 
-            // Рисуем лазер
-            const gunWorldPos = new THREE.Vector3();
-            gunGroup.getWorldPosition(gunWorldPos);
-            const lineMat = new THREE.LineBasicMaterial({ color: 0xff0000, linewidth: 2 });
-            const linePoints = [gunWorldPos];
-
             if (intersects.length > 0) {
-                const hitObject = intersects[0].object;
-                linePoints.push(intersects[0].point); // Лазер бьет в курицу
-
-                if (hitObject.isEnemyPart) {
-                    const deadChicken = hitObject.parent; // Получаем саму группу курицы
-                    scene.remove(deadChicken);
-                    enemies.splice(enemies.indexOf(deadChicken), 1);
-                    
-                    score++;
-                    document.getElementById('score').innerText = score;
-                    spawnChicken(); // Спавним новую
-                }
-            } else {
-                // Если промазали, лазер летит вдаль
-                const endPos = raycaster.ray.at(100, new THREE.Vector3());
-                linePoints.push(endPos);
+                let target = intersects[0].object;
+                while(target.parent && !enemies.includes(target)) { target = target.parent; }
+                
+                scene.remove(target);
+                enemies.splice(enemies.indexOf(target), 1);
+                score++;
+                document.getElementById('score').innerText = score;
+                spawnChicken();
             }
-
-            const lineGeo = new THREE.BufferGeometry().setFromPoints(linePoints);
-            const laser = new THREE.Line(lineGeo, lineMat);
-            scene.add(laser);
-            setTimeout(() => scene.remove(laser), 70); // Лазер исчезает через 70мс
         }
 
         function onWindowResize() {
@@ -241,47 +203,39 @@
 
         function animate() {
             requestAnimationFrame(animate);
+            const delta = clock.getDelta();
 
-            const time = performance.now();
-            const delta = (time - prevTime) / 1000;
-
-            if (controls.isLocked === true) {
-                // Физика и гравитация
+            if (controls.isLocked || isMobile) {
                 velocity.x -= velocity.x * 10.0 * delta;
                 velocity.z -= velocity.z * 10.0 * delta;
-                velocity.y -= 9.8 * 100.0 * delta; // Гравитация!
+                velocity.y -= 9.8 * 8.0 * delta; 
 
                 direction.z = Number(moveForward) - Number(moveBackward);
                 direction.x = Number(moveRight) - Number(moveLeft);
                 direction.normalize();
 
-                if (moveForward || moveBackward) velocity.z -= direction.z * 400.0 * delta;
-                if (moveLeft || moveRight) velocity.x -= direction.x * 400.0 * delta;
+                if (moveForward || moveBackward) velocity.z -= direction.z * 200.0 * delta;
+                if (moveLeft || moveRight) velocity.x -= direction.x * 200.0 * delta;
 
                 controls.moveRight(-velocity.x * delta);
                 controls.moveForward(-velocity.z * delta);
-                
-                // Применяем высоту
-                controls.getObject().position.y += (velocity.y * delta);
 
-                // Ограничение пола
-                if (controls.getObject().position.y < 10) {
+                controls.getObject().position.y += (velocity.y * delta);
+                if (controls.getObject().position.y < 3) {
                     velocity.y = 0;
-                    controls.getObject().position.y = 10;
+                    controls.getObject().position.y = 3;
                     canJump = true;
                 }
 
-                // ИИ Куриц - Они идут к игроку!
-                const playerPos = controls.getObject().position;
-                enemies.forEach(chicken => {
-                    // Курица смотрит на игрока (игнорируем высоту Y, чтобы не задирала голову)
-                    chicken.lookAt(playerPos.x, chicken.position.y, playerPos.z);
-                    // Идет вперед (скорость 15 единиц в секунду)
-                    chicken.translateZ(15 * delta);
+                // Анимация куриц
+                enemies.forEach(ch => {
+                    ch.lookAt(camera.position.x, 0, camera.position.z);
+                    ch.translateZ(5 * delta);
+                    // Эффект покачивания
+                    ch.position.y = Math.abs(Math.sin(Date.now() * 0.01)) * 0.5;
                 });
             }
 
-            prevTime = time;
             renderer.render(scene, camera);
         }
     </script>
